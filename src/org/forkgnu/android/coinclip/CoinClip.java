@@ -29,6 +29,9 @@ import static de.robv.android.xposed.XposedHelpers.findClass;
 import static de.robv.android.xposed.XposedHelpers.findField;
 import static de.robv.android.xposed.XposedHelpers.findAndHookMethod;
 import static de.robv.android.xposed.XposedHelpers.getObjectField;
+import static de.robv.android.xposed.XposedHelpers.setObjectField;
+import static de.robv.android.xposed.XposedHelpers.setBooleanField;
+import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.callbacks.XC_LoadPackage.LoadPackageParam;
@@ -43,10 +46,11 @@ public class CoinClip implements IXposedHookLoadPackage
 			return;
 
 		final Class<?> coinUser = findClass("com.onlycoin.android.data.User", lpparam.classLoader);
-		final Class<?> coinJsonMessage = findClass("com.onlycoin.android.data.JsonMessage", lpparam.classLoader);
 		final Class<?> coinCard = findClass("com.onlycoin.android.data.Card", lpparam.classLoader);
 		final Class<?> coinSecureCard = findClass("com.onlycoin.android.data.SecureCard", lpparam.classLoader);
-		final Field jmErrors = findField(coinJsonMessage, "errors");
+		final Class<?> coinWalletFragment = findClass("com.onlycoin.android.ui.WalletFragment", lpparam.classLoader);
+		final Class<?> coinAddCardFragment = findClass("com.onlycoin.android.ui.card.AddCardFragment", lpparam.classLoader);
+		final Class<?> coinCardReaderFragment = findClass("com.onlycoin.android.ui.card.CardReaderFragment", lpparam.classLoader);
 		final Field scAuthenticated = findField(coinSecureCard, "authenticated");
 		
 		findAndHookMethod(coinUser, "isDiagnosticsUser",
@@ -60,14 +64,72 @@ public class CoinClip implements IXposedHookLoadPackage
 			}
 		);
 
+		findAndHookMethod(coinSecureCard, "containsStripeInfo",
+			new XC_MethodHook()
+			{
+				@Override
+				protected void beforeHookedMethod(MethodHookParam param) throws Throwable
+				{
+					param.setResult(true);
+				}
+			}
+
+		);
+
+		findAndHookMethod(coinWalletFragment, "didCheck", coinSecureCard, "android.widget.TextView", "android.widget.CompoundButton",
+			new XC_MethodHook()
+			{
+				@Override
+				protected void beforeHookedMethod(MethodHookParam param) throws Throwable
+				{
+					try {
+						scAuthenticated.setBoolean(param.args[0], true);
+					} catch (IllegalAccessException e) {
+						XposedBridge.log(e);
+					}
+				}
+			}
+		);
+
+
+		findAndHookMethod(coinAddCardFragment, "setSecureCard", coinSecureCard,
+			new XC_MethodHook()
+			{
+				@Override
+				protected void beforeHookedMethod(MethodHookParam param) throws Throwable
+				{
+					try {
+						scAuthenticated.setBoolean(param.args[0], true);
+					} catch (IllegalAccessException e) {
+						XposedBridge.log(e);
+					}
+				}
+			}
+		);
+
+		findAndHookMethod(coinCardReaderFragment, "setSecureCard", coinSecureCard,
+			new XC_MethodHook()
+			{
+				@Override
+				protected void beforeHookedMethod(MethodHookParam param) throws Throwable
+				{
+					try {
+						scAuthenticated.setBoolean(param.args[0], true);
+					} catch (IllegalAccessException e) {
+						XposedBridge.log(e);
+					}
+				}
+			}
+		);
+
+
 		findAndHookMethod("com.onlycoin.android.ui.card.AddCardFragment$21$1$1$3$1", lpparam.classLoader, "call", "android.util.Pair",
 			new XC_MethodHook()
 			{
 				@Override
 				protected void beforeHookedMethod(MethodHookParam param) throws Throwable
 				{
-					java.lang.Object card = getObjectField(param.args[0], "first");
-					jmErrors.set(card, null);
+					setObjectField(getObjectField(param.args[0], "first"), "errors", null);
 				}
 			}
 		);
