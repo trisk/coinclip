@@ -31,6 +31,8 @@ import static de.robv.android.xposed.XposedHelpers.findAndHookMethod;
 import static de.robv.android.xposed.XposedHelpers.getObjectField;
 import static de.robv.android.xposed.XposedHelpers.setObjectField;
 import static de.robv.android.xposed.XposedHelpers.setBooleanField;
+import static de.robv.android.xposed.XposedHelpers.callMethod;
+import static de.robv.android.xposed.XposedHelpers.newInstance;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
@@ -38,8 +40,26 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage.LoadPackageParam;
 
 import java.lang.reflect.Field;
 
+import java.util.Date;
+
 public class CoinClip implements IXposedHookLoadPackage
 {
+	private static final long MILLISEC_PER_YEAR = 31556952000L;
+
+	private static String encodeTrack1(String number, String name, String addl)
+	{
+			// IATA format: number, name, additional data (inc. date)
+			String t1 = "%B" + number + "^" + name + "^" + addl + "?";
+			return t1;
+	}
+
+	private static String encodeTrack23(String number, String addl)
+	{
+			// ABA format: number, additional data
+			String t23 = ";" + number.replaceAll("[^0-9]", "") + "=" + addl + "?";
+			return t23;
+	}
+
 	public void handleLoadPackage(final LoadPackageParam lpparam) throws Throwable
 	{
 		if (!lpparam.packageName.equals("com.onlycoin.android"))
@@ -51,9 +71,21 @@ public class CoinClip implements IXposedHookLoadPackage
 		final Class<?> coinWalletFragment = findClass("com.onlycoin.android.ui.WalletFragment", lpparam.classLoader);
 		final Class<?> coinAddCardFragment = findClass("com.onlycoin.android.ui.card.AddCardFragment", lpparam.classLoader);
 		final Class<?> coinCardReaderFragment = findClass("com.onlycoin.android.ui.card.CardReaderFragment", lpparam.classLoader);
+		final Class<?> coinStripeInfo = findClass("com.onlycoin.android.data.SecureCard$StripeInfo", lpparam.classLoader);
 		final Field scAuthenticated = findField(coinSecureCard, "authenticated");
 		
 		findAndHookMethod(coinUser, "isDiagnosticsUser",
+			new XC_MethodHook()
+			{
+				@Override
+				protected void beforeHookedMethod(MethodHookParam param) throws Throwable
+				{
+					param.setResult(true);
+				}
+			}
+		);
+
+		findAndHookMethod(coinUser, "isDiagnosticsUser", coinUser,
 			new XC_MethodHook()
 			{
 				@Override
@@ -70,7 +102,48 @@ public class CoinClip implements IXposedHookLoadPackage
 				@Override
 				protected void beforeHookedMethod(MethodHookParam param) throws Throwable
 				{
-					param.setResult(true);
+					String enc = (String) getObjectField(param.thisObject, "encryptedManualPan");
+					if (enc != null && !enc.isEmpty())
+						param.setResult(true);
+				}
+			}
+
+		);
+
+		findAndHookMethod(coinSecureCard, "extractStripeInfo",
+			new XC_MethodHook()
+			{
+				@Override
+				protected void beforeHookedMethod(MethodHookParam param) throws Throwable
+				{
+					if (getObjectField(param.thisObject, "encryptedStripeInfo") != null)
+						return;
+
+					String pan = (String) callMethod(param.thisObject, "getManualPan");
+					if (pan == null) {
+						String nick = (String) getObjectField(param.thisObject, "nick");
+						XposedBridge.log("getManualPan() failed for card: " + nick);
+						pan = "0000000000000000";
+					}
+
+					String month = (String) getObjectField(param.thisObject, "expirationMonth");
+					String year = (String) getObjectField(param.thisObject, "expirationYear");
+					String expiry;
+					if (month != null && !month.isEmpty() && year != null && !year.isEmpty()) {
+						expiry = year + month;
+					} else {
+						Date future  = new Date(System.currentTimeMillis() + 5 * MILLISEC_PER_YEAR);
+						expiry = String.format("%ty%tm", future, future);
+					}
+
+					Object stripeInfo = newInstance(coinStripeInfo);
+					setObjectField(stripeInfo, "pan", pan);
+					setObjectField(stripeInfo, "first6Pan", pan.substring(0, 5));
+					setObjectField(stripeInfo, "last4Pan", pan.substring(pan.length() - 4));
+					setObjectField(stripeInfo, "track1", encodeTrack1(pan, " ", expiry));
+					setObjectField(stripeInfo, "track23", encodeTrack23(pan, expiry));
+					setObjectField(stripeInfo, "expiry", expiry);
+					param.setResult(stripeInfo);
 				}
 			}
 
