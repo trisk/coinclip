@@ -68,10 +68,11 @@ public class CoinClip implements IXposedHookLoadPackage
 		final Class<?> coinUser = findClass("com.onlycoin.android.data.User", lpparam.classLoader);
 		final Class<?> coinCard = findClass("com.onlycoin.android.data.Card", lpparam.classLoader);
 		final Class<?> coinSecureCard = findClass("com.onlycoin.android.data.SecureCard", lpparam.classLoader);
+		final Class<?> coinStripeInfo = findClass("com.onlycoin.android.data.SecureCard$StripeInfo", lpparam.classLoader);
+		final Class<?> coinCardListAdapter = findClass("com.onlycoin.android.ui.CardListAdapter", lpparam.classLoader);
 		final Class<?> coinWalletFragment = findClass("com.onlycoin.android.ui.WalletFragment", lpparam.classLoader);
 		final Class<?> coinAddCardFragment = findClass("com.onlycoin.android.ui.card.AddCardFragment", lpparam.classLoader);
 		final Class<?> coinCardReaderFragment = findClass("com.onlycoin.android.ui.card.CardReaderFragment", lpparam.classLoader);
-		final Class<?> coinStripeInfo = findClass("com.onlycoin.android.data.SecureCard$StripeInfo", lpparam.classLoader);
 		final Field scAuthenticated = findField(coinSecureCard, "authenticated");
 		
 		findAndHookMethod(coinUser, "isDiagnosticsUser",
@@ -137,16 +138,35 @@ public class CoinClip implements IXposedHookLoadPackage
 					}
 
 					Object stripeInfo = newInstance(coinStripeInfo);
-					setObjectField(stripeInfo, "pan", pan);
-					setObjectField(stripeInfo, "first6Pan", pan.substring(0, 5));
-					setObjectField(stripeInfo, "last4Pan", pan.substring(pan.length() - 4));
-					setObjectField(stripeInfo, "track1", encodeTrack1(pan, " ", expiry));
-					setObjectField(stripeInfo, "track23", encodeTrack23(pan, expiry));
-					setObjectField(stripeInfo, "expiry", expiry);
+					try {
+						setObjectField(stripeInfo, "pan", pan);
+						setObjectField(stripeInfo, "first6Pan", pan.substring(0, 5));
+						setObjectField(stripeInfo, "last4Pan", pan.substring(pan.length() - 4));
+						setObjectField(stripeInfo, "track1", encodeTrack1(pan, " ", expiry));
+						setObjectField(stripeInfo, "track23", encodeTrack23(pan, expiry));
+						setObjectField(stripeInfo, "expiry", expiry);
+					} catch (IllegalArgumentException e) {
+						XposedBridge.log(e);
+					}
 					param.setResult(stripeInfo);
 				}
 			}
 
+		);
+
+		findAndHookMethod(coinCardListAdapter, "update", coinSecureCard,
+			new XC_MethodHook()
+			{
+				@Override
+				protected void beforeHookedMethod(MethodHookParam param) throws Throwable
+				{
+					try {
+						scAuthenticated.setBoolean(param.args[1], true);
+					} catch (IllegalArgumentException e) {
+						XposedBridge.log(e);
+					}
+				}
+			}
 		);
 
 		findAndHookMethod(coinWalletFragment, "didCheck", coinSecureCard, "android.widget.TextView", "android.widget.CompoundButton",
@@ -157,13 +177,27 @@ public class CoinClip implements IXposedHookLoadPackage
 				{
 					try {
 						scAuthenticated.setBoolean(param.args[0], true);
-					} catch (IllegalAccessException e) {
+					} catch (IllegalArgumentException e) {
 						XposedBridge.log(e);
 					}
 				}
 			}
 		);
 
+		findAndHookMethod(coinAddCardFragment, "showAuthorize", coinSecureCard, "com.onlycoin.android.ui.CoinActivity", "com.onlycoin.android.utils.Async$Block",
+			new XC_MethodHook()
+			{
+				@Override
+				protected void beforeHookedMethod(MethodHookParam param) throws Throwable
+				{
+					try {
+						scAuthenticated.setBoolean(param.args[0], true);
+					} catch (IllegalArgumentException e) {
+						XposedBridge.log(e);
+					}
+				}
+			}
+		);
 
 		findAndHookMethod(coinAddCardFragment, "setSecureCard", coinSecureCard,
 			new XC_MethodHook()
@@ -173,7 +207,7 @@ public class CoinClip implements IXposedHookLoadPackage
 				{
 					try {
 						scAuthenticated.setBoolean(param.args[0], true);
-					} catch (IllegalAccessException e) {
+					} catch (IllegalArgumentException e) {
 						XposedBridge.log(e);
 					}
 				}
@@ -188,7 +222,7 @@ public class CoinClip implements IXposedHookLoadPackage
 				{
 					try {
 						scAuthenticated.setBoolean(param.args[0], true);
-					} catch (IllegalAccessException e) {
+					} catch (IllegalArgumentException e) {
 						XposedBridge.log(e);
 					}
 				}
@@ -202,7 +236,11 @@ public class CoinClip implements IXposedHookLoadPackage
 				@Override
 				protected void beforeHookedMethod(MethodHookParam param) throws Throwable
 				{
-					setObjectField(getObjectField(param.args[0], "first"), "errors", null);
+					try {
+						setObjectField(getObjectField(param.args[0], "first"), "errors", null);
+					} catch (IllegalArgumentException e) {
+						XposedBridge.log(e);
+					}
 				}
 			}
 		);
