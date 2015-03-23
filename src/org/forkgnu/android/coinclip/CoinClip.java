@@ -28,14 +28,12 @@ package org.forkgnu.android.coinclip;
 import static de.robv.android.xposed.XposedHelpers.findClass;
 import static de.robv.android.xposed.XposedHelpers.findField;
 import static de.robv.android.xposed.XposedHelpers.findAndHookMethod;
-import de.robv.android.xposed.XposedBridge;
+import static de.robv.android.xposed.XposedHelpers.getObjectField;
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.callbacks.XC_LoadPackage.LoadPackageParam;
 
 import java.lang.reflect.Field;
-
-import android.util.Pair;
 
 public class CoinClip implements IXposedHookLoadPackage
 {
@@ -44,14 +42,14 @@ public class CoinClip implements IXposedHookLoadPackage
 		if (!lpparam.packageName.equals("com.onlycoin.android"))
 			return;
 
-		final Class<?> card = findClass("com.onlycoin.android.data.Card", lpparam.classLoader);
-		final Class<?> secureCard = findClass("com.onlycoin.android.data.SecureCard", lpparam.classLoader);
-		final Field errors = findField(card, "errors");
-		final Field authenticated = findField(secureCard, "authenticated");
+		final Class<?> coinUser = findClass("com.onlycoin.android.data.User", lpparam.classLoader);
+		final Class<?> coinJsonMessage = findClass("com.onlycoin.android.data.JsonMessage", lpparam.classLoader);
+		final Class<?> coinCard = findClass("com.onlycoin.android.data.Card", lpparam.classLoader);
+		final Class<?> coinSecureCard = findClass("com.onlycoin.android.data.SecureCard", lpparam.classLoader);
+		final Field jmErrors = findField(coinJsonMessage, "errors");
+		final Field scAuthenticated = findField(coinSecureCard, "authenticated");
 		
-		XposedBridge.log("Loaded app: " + lpparam.packageName);
-
-		findAndHookMethod("com.onlycoin.android.data.User", lpparam.classLoader, "isDiagnosticsUser",
+		findAndHookMethod(coinUser, "isDiagnosticsUser",
 			new XC_MethodHook()
 			{
 				@Override
@@ -62,14 +60,14 @@ public class CoinClip implements IXposedHookLoadPackage
 			}
 		);
 
-		findAndHookMethod("com.onlycoin.android.ui.card.AddCardFragment$21$1$1$3$1", lpparam.classLoader, "call",
+		findAndHookMethod("com.onlycoin.android.ui.card.AddCardFragment$21$1$1$3$1", lpparam.classLoader, "call", "android.util.Pair",
 			new XC_MethodHook()
 			{
 				@Override
 				protected void beforeHookedMethod(MethodHookParam param) throws Throwable
 				{
-					Pair<java.lang.Object, java.lang.Exception> p = (Pair<java.lang.Object, java.lang.Exception>)param.args[0];
-					errors.set(p.first, null);
+					java.lang.Object card = getObjectField(param.args[0], "first");
+					jmErrors.set(card, null);
 				}
 			}
 		);
